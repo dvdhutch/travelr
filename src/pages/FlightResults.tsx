@@ -5,11 +5,9 @@ import Footer from '../components/Footer';
 import FlightCard from '../components/FlightCard';
 import { Flight } from '../types';
 import { fetchFlights } from '../services/flightService';
-import { useTheme } from '../context/ThemeContext';
 
 export default function FlightResults() {
   const [searchParams] = useSearchParams();
-  const { resolvedTheme } = useTheme();
   const address = searchParams.get('address') || '';
   const lat = parseFloat(searchParams.get('lat') || '0');
   const lon = parseFloat(searchParams.get('lon') || '0');
