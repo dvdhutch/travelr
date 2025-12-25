@@ -318,28 +318,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Sort by distance
     flights.sort((a, b) => a.distanceFromCenter - b.distanceFromCenter);
     
-    // Fetch route and aircraft information from adsbdb for all flights in parallel
-    // adsbdb rate limit: 60 requests per 60 seconds, so we add small delays
-    const dataPromises = flights.map(async (flight, index) => {
-      // Add small delay between requests to respect rate limits (60 req/60s)
-      if (index > 0) {
-        await new Promise(resolve => setTimeout(resolve, 50 * Math.min(index, 10)));
-      }
-      
-      // Fetch route and aircraft info in parallel for each flight
-      const [route, aircraftInfo] = await Promise.all([
-        fetchAircraftRoute(flight.callsign),
-        fetchAircraftInfo(flight.icao24),
-      ]);
-      
-      // Update route fields if data available, otherwise keep "N/A"
-      if (route.departure) flight.departureAirport = route.departure;
-      if (route.arrival) flight.arrivalAirport = route.arrival;
-      if (aircraftInfo.aircraftType) flight.aircraftType = aircraftInfo.aircraftType;
+    // Fetch route and aircraft information from adsbdb for closest flights only
+    // Limit to 30 flights to prevent timeout (2 API calls per flight = 60 max requests)
+    // adsbdb rate limit: 60 requests per 60 seconds
+    const flightsToEnrich = flights.slice(0, 30);
+    const enrichmentTimeout = 8000; // 8 seconds max for enrichment (leave 2s buffer)
+    
+    const enrichmentPromise = Promise.allSettled(
+      flightsToEnrich.map(async (flight) => {
+        // Fetch route and aircraft info in parallel for each flight
+        const [route, aircraftInfo] = await Promise.all([
+          fetchAircraftRoute(flight.callsign),
+          fetchAircraftInfo(flight.icao24),
+        ]);
+        
+        // Update route fields if data available, otherwise keep "N/A"
+        if (route.departure) flight.departureAirport = route.departure;
+        if (route.arrival) flight.arrivalAirport = route.arrival;
+        if (aircraftInfo.aircraftType) flight.aircraftType = aircraftInfo.aircraftType;
+      })
+    );
+    
+    // Race between enrichment and timeout to prevent function timeout
+    const timeoutPromise = new Promise<void>((resolve) => {
+      setTimeout(() => resolve(), enrichmentTimeout);
     });
     
-    // Wait for all data fetches to complete
-    await Promise.allSettled(dataPromises);
+    await Promise.race([enrichmentPromise, timeoutPromise]);
     
     return res.status(200).json({
       timestamp: data.time || Date.now() / 1000,
