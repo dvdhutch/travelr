@@ -267,6 +267,11 @@ async function fetchWithTimeout(url: string, options: RequestInit & { timeout?: 
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // #region agent log
+  const handlerStartTime = Date.now();
+  fetch('http://127.0.0.1:7243/ingest/d970966d-051d-4676-9075-573088c1a8c4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'flights.ts:handler_entry',message:'Handler started',data:{query:req.query,method:req.method},timestamp:handlerStartTime,sessionId:'debug-session',runId:'run1',hypothesisId:'ALL'})}).catch(()=>{});
+  // #endregion
+  
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -310,6 +315,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     url.searchParams.set('lomax', bbox.lomax.toString());
     url.searchParams.set('extended', '1'); // Include aircraft category
     
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/d970966d-051d-4676-9075-573088c1a8c4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'flights.ts:before_fetch',message:'Before OpenSky fetch',data:{url:url.toString(),bbox,hasAuth:!!authHeader,centerLat,centerLon,radiusMiles},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    
     // Make request to OpenSky with Basic Auth and timeout
     const headers: Record<string, string> = {};
     if (authHeader) {
@@ -319,17 +328,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let response;
     let retries = 2;
     let lastError;
+    let attemptNumber = 0;
     
     // Retry logic for OpenSky API (can be slow/unreliable)
     while (retries > 0) {
+      attemptNumber++;
+      const attemptStartTime = Date.now();
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/d970966d-051d-4676-9075-573088c1a8c4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'flights.ts:retry_loop',message:'Retry loop iteration',data:{attemptNumber,retriesLeft:retries,elapsedSinceHandlerStart:Date.now()-handlerStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      
       try {
         response = await fetchWithTimeout(url.toString(), { 
           headers,
           timeout: 8000 // 8 second timeout for each attempt
         });
+        // #region agent log
+        const attemptDuration = Date.now() - attemptStartTime;
+        fetch('http://127.0.0.1:7243/ingest/d970966d-051d-4676-9075-573088c1a8c4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'flights.ts:fetch_success',message:'Fetch succeeded',data:{attemptNumber,attemptDuration,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C'})}).catch(()=>{});
+        // #endregion
         break; // Success, exit retry loop
       } catch (error) {
+        const attemptDuration = Date.now() - attemptStartTime;
         lastError = error;
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/d970966d-051d-4676-9075-573088c1a8c4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'flights.ts:fetch_error',message:'Fetch failed',data:{attemptNumber,attemptDuration,errorName:error?.name,errorMessage:error?.message,errorCode:error?.code,retriesLeft:retries-1},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C,D'})}).catch(()=>{});
+        // #endregion
         retries--;
         if (retries > 0) {
           // Wait 1 second before retry
@@ -339,6 +363,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     
     if (!response) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/d970966d-051d-4676-9075-573088c1a8c4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'flights.ts:all_retries_failed',message:'All retries exhausted',data:{totalAttempts:attemptNumber,totalElapsed:Date.now()-handlerStartTime,lastErrorName:lastError?.name,lastErrorMessage:lastError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D'})}).catch(()=>{});
+      // #endregion
       console.error('OpenSky API timeout after retries:', lastError);
       return res.status(504).json({ 
         error: 'Flight data service is temporarily unavailable',
