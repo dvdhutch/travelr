@@ -148,7 +148,11 @@ async function fetchAircraftRoute(callsign: string): Promise<{ departure?: strin
   try {
     const url = `${ADSBDB_API_BASE}/callsign/${encodeURIComponent(callsign.trim())}`;
     
-    const response = await fetch(url);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
     
     if (response.ok) {
       const data = await response.json();
@@ -182,7 +186,11 @@ async function fetchAircraftInfo(icao24: string): Promise<{ aircraftType?: strin
   try {
     const url = `${ADSBDB_API_BASE}/aircraft/${encodeURIComponent(icao24.trim().toUpperCase())}`;
     
-    const response = await fetch(url);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
     
     if (response.ok) {
       const data = await response.json();
@@ -238,6 +246,26 @@ function convertToFlightData(state: OpenSkyState, centerLat: number, centerLon: 
   };
 }
 
+// Fetch with timeout helper
+async function fetchWithTimeout(url: string, options: RequestInit & { timeout?: number } = {}) {
+  const { timeout = 15000, ...fetchOptions } = options;
+  
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, {
+      ...fetchOptions,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -282,16 +310,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     url.searchParams.set('lomax', bbox.lomax.toString());
     url.searchParams.set('extended', '1'); // Include aircraft category
     
-    // Make request to OpenSky with Basic Auth
+    // Make request to OpenSky with Basic Auth and timeout
     const headers: Record<string, string> = {};
     if (authHeader) {
       headers['Authorization'] = authHeader;
     }
     
-    const response = await fetch(url.toString(), { headers });
+    let response;
+    let retries = 2;
+    let lastError;
+    
+    // Retry logic for OpenSky API (can be slow/unreliable)
+    while (retries > 0) {
+      try {
+        response = await fetchWithTimeout(url.toString(), { 
+          headers,
+          timeout: 8000 // 8 second timeout for each attempt
+        });
+        break; // Success, exit retry loop
+      } catch (error) {
+        lastError = error;
+        retries--;
+        if (retries > 0) {
+          // Wait 1 second before retry
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    }
+    
+    if (!response) {
+      console.error('OpenSky API timeout after retries:', lastError);
+      return res.status(504).json({ 
+        error: 'Flight data service is temporarily unavailable',
+        details: 'The OpenSky Network API is not responding. Please try again in a moment.'
+      });
+    }
     
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = await response.text().catch(() => 'Unknown error');
       console.error('OpenSky API error:', response.status, errorText);
       return res.status(response.status).json({ 
         error: 'Failed to fetch flight data',
