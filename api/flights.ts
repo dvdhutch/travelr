@@ -326,7 +326,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     
     let response;
-    let retries = 2;
+    let retries = 1;
     let lastError;
     let attemptNumber = 0;
     
@@ -341,7 +341,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         response = await fetchWithTimeout(url.toString(), { 
           headers,
-          timeout: 8000 // 8 second timeout for each attempt
+          timeout: 20000 // 20 second timeout - OpenSky can be slow from Vercel
         });
         // #region agent log
         const attemptDuration = Date.now() - attemptStartTime;
@@ -405,7 +405,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Limit to 30 flights to prevent timeout (2 API calls per flight = 60 max requests)
     // adsbdb rate limit: 60 requests per 60 seconds
     const flightsToEnrich = flights.slice(0, 30);
-    const enrichmentTimeout = 8000; // 8 seconds max for enrichment (leave 2s buffer)
+    const enrichmentTimeout = 5000; // 5 seconds max for enrichment (OpenSky uses 20s, total ~25s)
     
     const enrichmentPromise = Promise.allSettled(
       flightsToEnrich.map(async (flight) => {
