@@ -1,4 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { Agent, setGlobalDispatcher } from 'undici';
+
+// Configure undici with longer connection timeout for slow APIs
+const agent = new Agent({
+  connect: {
+    timeout: 25000, // 25 second connection timeout
+  },
+});
+setGlobalDispatcher(agent);
 
 // OpenSky API base URL
 const OPENSKY_API_BASE = 'https://opensky-network.org/api';

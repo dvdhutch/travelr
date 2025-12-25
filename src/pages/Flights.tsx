@@ -16,9 +16,6 @@ export default function Flights() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleRetrieve = (res: any) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/d970966d-051d-4676-9075-573088c1a8c4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Flights.tsx:16',message:'handleRetrieve called',data:{hasRes:!!res,hasFeatures:!!(res?.features),featuresLength:res?.features?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'F'})}).catch(()=>{});
-    // #endregion
     if (res && res.features && res.features.length > 0) {
       const selectedFeature = res.features[0];
       const props = selectedFeature.properties || {};
@@ -33,23 +30,13 @@ export default function Flights() {
         props.feature_name ||
         '';
       
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/d970966d-051d-4676-9075-573088c1a8c4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Flights.tsx:25',message:'placeName extracted',data:{placeName,fullAddress:props.full_address,placeNameProp:props.place_name,textEn:selectedFeature.text_en},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-      
       // Always update address with the extracted placeName (even if empty, to clear it)
       setAddress(placeName);
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/d970966d-051d-4676-9075-573088c1a8c4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Flights.tsx:30',message:'setAddress called',data:{placeName},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
       
       // Extract coordinates from the feature
       if (selectedFeature.geometry && selectedFeature.geometry.coordinates) {
         const [lon, lat] = selectedFeature.geometry.coordinates;
         setCoordinates({ lat, lon });
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/d970966d-051d-4676-9075-573088c1a8c4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Flights.tsx:35',message:'coordinates set',data:{lat,lon},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
       }
       
       // Also ensure the input element is updated
@@ -73,9 +60,6 @@ export default function Flights() {
         setTimeout(() => {
           if (inputRef.current) {
             const currentValue = inputRef.current.value;
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/d970966d-051d-4676-9075-573088c1a8c4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Flights.tsx:46',message:'setTimeout fallback',data:{currentValue,currentValueType:typeof currentValue,hasValue:!!currentValue},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-            // #endregion
             if (currentValue) {
               setAddress(currentValue);
             }
@@ -93,9 +77,6 @@ export default function Flights() {
   }, []);
 
   const handleSubmit = () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/d970966d-051d-4676-9075-573088c1a8c4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Flights.tsx:65',message:'handleSubmit called',data:{address,addressType:typeof address,hasCoordinates:!!coordinates},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
-    // #endregion
     if (!address?.trim() || !coordinates) return;
     const params = new URLSearchParams({
       address: address,
@@ -195,12 +176,7 @@ export default function Flights() {
             {/* Submit Button */}
             <button
               onClick={handleSubmit}
-              disabled={(() => {
-                // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/d970966d-051d-4676-9075-573088c1a8c4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Flights.tsx:144',message:'disabled prop evaluation',data:{address,addressType:typeof address,isNull:address===null,isUndefined:address===undefined,hasCoordinates:!!coordinates},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A,B,D'})}).catch(()=>{});
-                // #endregion
-                return !(address || '').trim() || !coordinates;
-              })()}
+              disabled={!(address || '').trim() || !coordinates}
               className="w-full mt-4 inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-primary-600/50 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5 disabled:transform-none"
             >
               <svg
