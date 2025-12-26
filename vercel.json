@@ -8,9 +8,9 @@
   "functions": {
     "api/flights.ts": {
       "maxDuration": 60,
-      "memory": 1024
+      "memory": 1024,
+      "regions": ["arn1"]
     }
-  },
-  "regions": ["fra1"]
+  }
 }
 
