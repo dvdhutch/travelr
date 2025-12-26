@@ -257,10 +257,15 @@ function convertToFlightData(state: OpenSkyState, centerLat: number, centerLon: 
 
 // Fetch with timeout helper
 async function fetchWithTimeout(url: string, options: RequestInit & { timeout?: number } = {}) {
-  const { timeout = 15000, ...fetchOptions } = options;
+  const { timeout = 20000, ...fetchOptions } = options; // Default to 20s for OpenSky
+  
+  console.log('[DEBUG] fetchWithTimeout starting', JSON.stringify({location:'flights.ts:fetchWithTimeout',timeoutMs:timeout,timestamp:Date.now()}));
   
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  const timeoutId = setTimeout(() => {
+    console.log('[DEBUG] fetchWithTimeout abort triggered', JSON.stringify({location:'flights.ts:fetchWithTimeout_abort',timeoutMs:timeout,timestamp:Date.now()}));
+    controller.abort();
+  }, timeout);
   
   try {
     const response = await fetch(url, {
@@ -335,9 +340,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     
     let response;
-    let retries = 1;
+    let retries = 3;
     let lastError;
     let attemptNumber = 0;
+    const maxRetries = 3;
     
     // Retry logic for OpenSky API (can be slow/unreliable)
     while (retries > 0) {
@@ -365,20 +371,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // #endregion
         retries--;
         if (retries > 0) {
-          // Wait 1 second before retry
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          // Exponential backoff: 1s, 2s, 4s between retries
+          const backoffDelay = 1000 * Math.pow(2, maxRetries - retries - 1);
+          console.log('[DEBUG] Retrying after backoff', JSON.stringify({location:'flights.ts:retry_backoff',backoffMs:backoffDelay,retriesRemaining:retries,timestamp:Date.now()}));
+          await new Promise(resolve => setTimeout(resolve, backoffDelay));
         }
       }
     }
     
     if (!response) {
       // #region agent log
-      console.log('[DEBUG] All retries exhausted', JSON.stringify({location:'flights.ts:all_retries_failed',totalAttempts:attemptNumber,totalElapsed:Date.now()-handlerStartTime,lastErrorName:(lastError as any)?.name,lastErrorMessage:(lastError as any)?.message,timestamp:Date.now(),hypothesisId:'A,D'}));
+      console.log('[DEBUG] All retries exhausted', JSON.stringify({location:'flights.ts:all_retries_failed',totalAttempts:attemptNumber,totalElapsed:Date.now()-handlerStartTime,lastErrorName:(lastError as any)?.name,lastErrorMessage:(lastError as any)?.message,lastErrorCode:(lastError as any)?.code,timestamp:Date.now(),hypothesisId:'A,D'}));
       // #endregion
       console.error('OpenSky API timeout after retries:', lastError);
-      return res.status(504).json({ 
-        error: 'Flight data service is temporarily unavailable',
-        details: 'The OpenSky Network API is not responding. Please try again in a moment.'
+      res.setHeader('Retry-After', '30');
+      return res.status(503).json({ 
+        error: 'Flight data service temporarily unavailable',
+        details: 'Unable to connect to OpenSky Network API. This may be due to network issues or API downtime. Please try again in a moment.',
+        code: 'OPENSKY_TIMEOUT',
+        retryAfter: 30,
+        timestamp: new Date().toISOString()
       });
     }
     
