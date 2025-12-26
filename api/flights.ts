@@ -113,10 +113,12 @@ function getAuthHeader(): string | null {
   const password = process.env.OPENSKY_PASSWORD;
   
   if (!username || !password) {
-    // Silently fall back to anonymous access (with lower rate limits)
+    // Log warning - anonymous access is often blocked by OpenSky for cloud IPs
+    console.warn('[WARN] OpenSky credentials not configured. Anonymous access may be blocked from cloud providers. Set OPENSKY_USERNAME and OPENSKY_PASSWORD environment variables.');
     return null;
   }
   
+  console.log('[DEBUG] Using OpenSky authentication', JSON.stringify({location:'flights.ts:getAuthHeader',username,timestamp:Date.now()}));
   const credentials = Buffer.from(`${username}:${password}`).toString('base64');
   return `Basic ${credentials}`;
 }
@@ -383,12 +385,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // #region agent log
       console.log('[DEBUG] All retries exhausted', JSON.stringify({location:'flights.ts:all_retries_failed',totalAttempts:attemptNumber,totalElapsed:Date.now()-handlerStartTime,lastErrorName:(lastError as any)?.name,lastErrorMessage:(lastError as any)?.message,lastErrorCode:(lastError as any)?.code,timestamp:Date.now(),hypothesisId:'A,D'}));
       // #endregion
-      console.error('OpenSky API timeout after retries:', lastError);
+      const hasAuth = !!authHeader;
+      console.error('OpenSky API timeout after retries:', lastError, { hasAuth });
       res.setHeader('Retry-After', '30');
       return res.status(503).json({ 
         error: 'Flight data service temporarily unavailable',
-        details: 'Unable to connect to OpenSky Network API. This may be due to network issues or API downtime. Please try again in a moment.',
+        details: hasAuth 
+          ? 'Unable to connect to OpenSky Network API. The service may be temporarily overloaded. Please try again in a moment.'
+          : 'Unable to connect to OpenSky Network API. Anonymous access from cloud providers is often blocked. Please try again later.',
         code: 'OPENSKY_TIMEOUT',
+        authenticated: hasAuth,
         retryAfter: 30,
         timestamp: new Date().toISOString()
       });

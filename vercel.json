@@ -7,8 +7,10 @@
   ],
   "functions": {
     "api/flights.ts": {
-      "maxDuration": 30
+      "maxDuration": 60,
+      "memory": 1024
     }
-  }
+  },
+  "regions": ["fra1"]
 }
 
